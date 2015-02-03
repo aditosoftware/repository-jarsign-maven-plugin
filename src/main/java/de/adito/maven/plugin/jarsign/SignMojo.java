@@ -33,6 +33,12 @@ public class SignMojo extends AbstractMojo
   @Component
   private MavenProject project;
 
+  @Component(hint = "sha1")
+  private Digester sha1Digester;
+
+  /**
+   * If <i>true</i> all jars are signed no matter whether already signed or not.
+   */
   @Parameter(defaultValue = "false", property = "jarsigner.force")
   private boolean forceSign;
 
@@ -66,9 +72,6 @@ public class SignMojo extends AbstractMojo
   @Parameter(property = "jarsigner.tsa")
   private String tsa;
 
-  @Component(hint = "sha1")
-  private Digester sha1Digester;
-
 
   public void execute() throws MojoExecutionException
   {
@@ -78,6 +81,7 @@ public class SignMojo extends AbstractMojo
       jarSigner.enableLogging(new ConsoleLogger());
 
       Set<Artifact> artifacts = project.getArtifacts();
+      int signCount = 0;
 
       for (Artifact artifact : artifacts)
       {
@@ -93,6 +97,9 @@ public class SignMojo extends AbstractMojo
           signRequest.setKeypass(keypass);
           signRequest.setTsaLocation(tsa);
           _execute(jarSigner, signRequest);
+
+          _installSignChecksum(file);
+          signCount++;
         }
 
         JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
@@ -100,13 +107,12 @@ public class SignMojo extends AbstractMojo
         verifyRequest.setVerbose(true);
         verifyRequest.setArguments("-strict", "-verbose:summary");
         _execute(jarSigner, verifyRequest);
-
-        _installSignChecksum(file);
       }
 
-      getLog().info(artifacts.size() + " jars have been processed.");
+      getLog().info(signCount + " jars have been resigned.");
+      getLog().info(artifacts.size() + " jars have been verified.");
     }
-    catch (Exception e)
+    catch (CommandLineException | IOException | JavaToolException e)
     {
       throw new MojoExecutionException(e.getMessage(), e);
     }
@@ -122,12 +128,15 @@ public class SignMojo extends AbstractMojo
   }
 
   private void _execute(JarSigner pJarSigner, AbstractJarSignerRequest pRequest)
-      throws CommandLineException, JavaToolException
+      throws CommandLineException, JavaToolException, MojoExecutionException
   {
     JavaToolResult result = pJarSigner.execute(pRequest);
     CommandLineException executionException = result.getExecutionException();
     if (executionException != null)
       throw executionException;
+    int exitCode = result.getExitCode();
+    if (exitCode != 0)
+      throw new MojoExecutionException("Wrong exit code '" + exitCode + "'. Jar signing or verifying failed");
   }
 
   private boolean _existingChecksumMatchs(File pFile) throws MojoExecutionException
