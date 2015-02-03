@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>de.adito</groupId>
@@ -10,7 +10,8 @@
   <packaging>maven-plugin</packaging>
   <name>repository jarsign maven plugin</name>
 
-  <description>A maven plugin that signs jars in your local repository so that they need to be signed only once.</description>
+  <description>A maven plugin that signs jars in your local repository so that they need to be signed only once.
+  </description>
 
 
   <organization>
@@ -37,7 +38,6 @@
     <url>https://github.com/jboesl/repository-jarsign-maven-plugin/issues</url>
     <system>github</system>
   </issueManagement>
-
 
 
   <distributionManagement>
@@ -88,6 +88,12 @@
       <version>2.3.1</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.zeroturnaround</groupId>
+      <artifactId>zt-zip</artifactId>
+      <version>1.8</version>
+    </dependency>
+
   </dependencies>
 
 
@@ -112,7 +118,10 @@
           <keypass>testing</keypass>
           <storepass>testing</storepass>
           <!--<tsa>https://timestamp.geotrust.com/tsa</tsa>-->
-          <!--<forceSign>true</forceSign>-->
+          <forceSign>true</forceSign>
+          <!--<additionalManifestEntries>-->
+            <!--<TestEntry>testValue</TestEntry>-->
+          <!--</additionalManifestEntries>-->
         </configuration>
       </plugin>
 

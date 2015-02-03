@@ -16,10 +16,16 @@ import org.codehaus.plexus.digest.Digester;
 import org.codehaus.plexus.digest.DigesterException;
 import org.codehaus.plexus.logging.console.ConsoleLogger;
 import org.codehaus.plexus.util.FileUtils;
+import org.zeroturnaround.zip.ZipUtil;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 
 /**
  * @author PaL
@@ -39,8 +45,14 @@ public class SignMojo extends AbstractMojo
   /**
    * If <i>true</i> all jars are signed no matter whether already signed or not.
    */
-  @Parameter(defaultValue = "false", property = "jarsigner.force")
+  @Parameter(defaultValue = "false", property = "repository.jarsign.force")
   private boolean forceSign;
+
+  /**
+   * All entries in this map are added to the jars manifests.
+   */
+  @Parameter
+  private Map<String, String> additionalManifestEntries;
 
   /**
    * See <a href="http://java.sun.com/javase/6/docs/technotes/tools/windows/jarsigner.html#Options">options</a>.
@@ -88,10 +100,11 @@ public class SignMojo extends AbstractMojo
         File file = artifact.getFile();
         if (forceSign || !_existingChecksumMatchs(file))
         {
-          getLog().info("Signing " + file.getAbsolutePath() + ".");
-
           JarSignerUtil.unsignArchive(file);
 
+          _updateManifest(file);
+
+          getLog().info("Signing " + file.getAbsolutePath() + ".");
           JarSignerSignRequest signRequest = new JarSignerSignRequest();
           _setup(signRequest, file);
           signRequest.setKeypass(keypass);
@@ -118,6 +131,32 @@ public class SignMojo extends AbstractMojo
     }
   }
 
+  private void _updateManifest(File pFile) throws IOException
+  {
+    try
+    {
+      String manifestPath = "META-INF/MANIFEST.MF";
+      byte[] zipContent = ZipUtil.unpackEntry(pFile, manifestPath);
+      try (ByteArrayInputStream inputStream = new ByteArrayInputStream(zipContent))
+      {
+        Manifest manifest = new Manifest(inputStream);
+        Attributes mainAttributes = manifest.getMainAttributes();
+        for (Map.Entry<String, String> entry : additionalManifestEntries.entrySet())
+          mainAttributes.putValue(entry.getKey(), entry.getValue());
+
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
+        {
+          manifest.write(outputStream);
+          ZipUtil.replaceEntry(pFile, manifestPath, outputStream.toByteArray());
+          getLog().info("Updated manifest for " + pFile + ".");
+        }
+      }
+    }
+    catch (Exception e)
+    {
+      getLog().error(e);
+    }
+  }
 
   private void _setup(AbstractJarSignerRequest pRequest, File pFile)
   {
