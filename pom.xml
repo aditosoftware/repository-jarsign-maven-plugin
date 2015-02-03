@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>de.adito</groupId>
@@ -9,6 +9,50 @@
   <version>1.0-SNAPSHOT</version>
   <packaging>maven-plugin</packaging>
   <name>repository jarsign maven plugin</name>
+
+  <description>A maven plugin that signs jars in your local repository so that they need to be signed only once.</description>
+
+
+  <organization>
+    <name>ADITO Software GmbH</name>
+    <url>http://www.adito.de</url>
+  </organization>
+
+  <developers>
+    <developer>
+      <name>Johannes Boesl</name>
+      <id>jboesl</id>
+      <email>j.boesl@adito.de</email>
+      <timezone>1</timezone>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>https://github.com/jboesl/repository-jarsign-maven-plugin.git</connection>
+    <developerConnection>git@github.com:jboesl/repository-jarsign-maven-plugin.git</developerConnection>
+    <url>https://github.com/jboesl/repository-jarsign-maven-plugin</url>
+  </scm>
+
+  <issueManagement>
+    <url>https://github.com/jboesl/repository-jarsign-maven-plugin/issues</url>
+    <system>github</system>
+  </issueManagement>
+
+
+
+  <distributionManagement>
+    <repository>
+      <id>adito.m2</id>
+      <name>releases</name>
+      <url>${repository.releases}</url>
+    </repository>
+    <snapshotRepository>
+      <id>adito.m2</id>
+      <name>snapshots</name>
+      <url>${repository.snapshots}</url>
+      <uniqueVersion>false</uniqueVersion>
+    </snapshotRepository>
+  </distributionManagement>
 
 
   <dependencies>
