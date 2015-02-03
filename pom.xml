@@ -5,10 +5,11 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>de.adito</groupId>
-  <artifactId>repository-jarsign-plugin</artifactId>
+  <artifactId>repository-jarsign-maven-plugin</artifactId>
   <version>1.0-SNAPSHOT</version>
   <packaging>maven-plugin</packaging>
-  <name>repository-jarsign-plugin</name>
+  <name>repository jarsign maven plugin</name>
+
 
   <dependencies>
 
@@ -59,7 +60,7 @@
 
       <plugin>
         <groupId>de.adito</groupId>
-        <artifactId>repository-jarsign-plugin</artifactId>
+        <artifactId>repository-jarsign-maven-plugin</artifactId>
         <version>1.0-SNAPSHOT</version>
         <configuration>
           <alias>test</alias>
