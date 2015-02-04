@@ -1,31 +1,21 @@
 package de.adito.maven.plugin.jarsign;
 
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.Component;
+import org.apache.maven.plugin.*;
+import org.apache.maven.plugins.annotations.*;
 import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.jarsigner.*;
 import org.apache.maven.shared.utils.cli.CommandLineException;
-import org.apache.maven.shared.utils.cli.javatool.JavaToolException;
-import org.apache.maven.shared.utils.cli.javatool.JavaToolResult;
-import org.codehaus.plexus.digest.Digester;
-import org.codehaus.plexus.digest.DigesterException;
+import org.apache.maven.shared.utils.cli.javatool.*;
+import org.codehaus.plexus.digest.*;
 import org.codehaus.plexus.logging.console.ConsoleLogger;
 import org.codehaus.plexus.util.FileUtils;
 import org.zeroturnaround.zip.ZipUtil;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.util.Map;
-import java.util.Set;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
+import java.io.*;
+import java.util.*;
+import java.util.jar.*;
 
 /**
  * @author PaL
@@ -94,36 +84,42 @@ public class SignMojo extends AbstractMojo
 
       Set<Artifact> artifacts = project.getArtifacts();
       int signCount = 0;
+      int verifyCount = 0;
 
       for (Artifact artifact : artifacts)
       {
-        File file = artifact.getFile();
-        if (forceSign || !_existingChecksumMatchs(file))
+        String scope = artifact.getScope();
+        if (scope.equals("compile") || scope.equals("runtime"))
         {
-          JarSignerUtil.unsignArchive(file);
+          File file = artifact.getFile();
+          if (forceSign || !_existingChecksumMatchs(file))
+          {
+            JarSignerUtil.unsignArchive(file);
 
-          _updateManifest(file);
+            _updateManifest(file);
 
-          getLog().info("Signing " + file.getAbsolutePath() + ".");
-          JarSignerSignRequest signRequest = new JarSignerSignRequest();
-          _setup(signRequest, file);
-          signRequest.setKeypass(keypass);
-          signRequest.setTsaLocation(tsa);
-          _execute(jarSigner, signRequest);
+            getLog().info("Signing " + file.getAbsolutePath() + ".");
+            JarSignerSignRequest signRequest = new JarSignerSignRequest();
+            _setup(signRequest, file);
+            signRequest.setKeypass(keypass);
+            signRequest.setTsaLocation(tsa);
+            _execute(jarSigner, signRequest);
 
-          _installSignChecksum(file);
-          signCount++;
+            _installSignChecksum(file);
+            signCount++;
+          }
+
+          JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
+          _setup(verifyRequest, file);
+          verifyRequest.setVerbose(true);
+          verifyRequest.setArguments("-strict", "-verbose:summary");
+          _execute(jarSigner, verifyRequest);
+          verifyCount++;
         }
-
-        JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
-        _setup(verifyRequest, file);
-        verifyRequest.setVerbose(true);
-        verifyRequest.setArguments("-strict", "-verbose:summary");
-        _execute(jarSigner, verifyRequest);
       }
 
       getLog().info(signCount + " jars have been resigned.");
-      getLog().info(artifacts.size() + " jars have been verified.");
+      getLog().info(verifyCount + " jars have been verified.");
     }
     catch (CommandLineException | IOException | JavaToolException e)
     {
@@ -202,7 +198,7 @@ public class SignMojo extends AbstractMojo
     catch (DigesterException e)
     {
       throw new MojoExecutionException("Failed to calculate " + sha1Digester.getAlgorithm() + " checksum for "
-          + pFile, e);
+                                           + pFile, e);
     }
   }
 
