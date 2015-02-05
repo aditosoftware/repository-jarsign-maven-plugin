@@ -75,6 +75,10 @@ public class SignMojo extends AbstractMojo
   private String tsa;
 
 
+  private static final Collection<String> SCOPES = Arrays.asList("compile", "runtime");
+  private static final String CHECKSUM_POSTFIX = ".signed.sha1";
+
+
   public void execute() throws MojoExecutionException
   {
     try
@@ -82,49 +86,85 @@ public class SignMojo extends AbstractMojo
       DefaultJarSigner jarSigner = new DefaultJarSigner();
       jarSigner.enableLogging(new ConsoleLogger());
 
-      Set<Artifact> artifacts = project.getArtifacts();
-      int signCount = 0;
-      int verifyCount = 0;
 
-      for (Artifact artifact : artifacts)
+      Set<File> workFiles = _getWorkFiles();
+      for (File file : workFiles)
       {
-        String scope = artifact.getScope();
-        if (scope.equals("compile") || scope.equals("runtime"))
-        {
-          File file = artifact.getFile();
-          if (forceSign || !_existingChecksumMatchs(file))
-          {
-            JarSignerUtil.unsignArchive(file);
+        getLog().info("Signing " + file.getAbsolutePath() + ".");
 
-            _updateManifest(file);
+        File workingCopy = new File(file.getAbsolutePath() + "~");
+        FileUtils.copyFile(file, workingCopy);
 
-            getLog().info("Signing " + file.getAbsolutePath() + ".");
-            JarSignerSignRequest signRequest = new JarSignerSignRequest();
-            _setup(signRequest, file);
-            signRequest.setKeypass(keypass);
-            signRequest.setTsaLocation(tsa);
-            _execute(jarSigner, signRequest);
+        JarSignerUtil.unsignArchive(workingCopy);
 
-            _installSignChecksum(file);
-            signCount++;
-          }
+        _updateManifest(workingCopy);
 
-          JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
-          _setup(verifyRequest, file);
-          verifyRequest.setVerbose(true);
-          verifyRequest.setArguments("-strict", "-verbose:summary");
-          _execute(jarSigner, verifyRequest);
-          verifyCount++;
-        }
+        JarSignerSignRequest signRequest = new JarSignerSignRequest();
+        _setup(signRequest, workingCopy);
+        signRequest.setKeypass(keypass);
+        signRequest.setTsaLocation(tsa);
+        _execute(jarSigner, signRequest);
+
+        _installSignChecksum(workingCopy, file.getAbsolutePath() + CHECKSUM_POSTFIX);
+
+        _updateFile(file, workingCopy);
+
+        JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
+        _setup(verifyRequest, file);
+        verifyRequest.setVerbose(true);
+        verifyRequest.setArguments("-strict", "-verbose:summary");
+        _execute(jarSigner, verifyRequest);
+
+        if (Thread.interrupted())
+          throw new InterruptedException();
       }
-
-      getLog().info(signCount + " jars have been resigned.");
-      getLog().info(verifyCount + " jars have been verified.");
+      getLog().info(workFiles.size() + " jars have been signed and verified.");
     }
-    catch (CommandLineException | IOException | JavaToolException e)
+    catch (CommandLineException | IOException | JavaToolException | InterruptedException e)
     {
       throw new MojoExecutionException(e.getMessage(), e);
     }
+  }
+
+  private void _updateFile(File pOrgFile, File pWorkingCopy) throws MojoExecutionException, IOException, InterruptedException
+  {
+    IOException ioEx = null;
+    for (int i = 0; i < 10; i++)
+    {
+      try
+      {
+        FileUtils.forceDelete(pOrgFile);
+        ioEx = null;
+        break;
+      }
+      catch (IOException e)
+      {
+        ioEx = e;
+      }
+      Thread.sleep(250);
+    }
+    if (ioEx != null)
+      throw ioEx;
+    FileUtils.rename(pWorkingCopy, pOrgFile);
+  }
+
+  private Set<File> _getWorkFiles() throws MojoExecutionException
+  {
+    int toSignCount = 0;
+    Set<File> workFiles = new HashSet<>();
+    for (Artifact artifact : project.getArtifacts())
+    {
+      if (SCOPES.contains(artifact.getScope()))
+      {
+        toSignCount++;
+        File file = artifact.getFile();
+        if (forceSign || !_existingChecksumMatches(file))
+          workFiles.add(file);
+      }
+    }
+    getLog().info(toSignCount + " jars are relevant for signing.");
+    getLog().info(workFiles.size() + " jars need to be signed.");
+    return workFiles;
   }
 
   private void _updateManifest(File pFile) throws IOException
@@ -174,12 +214,12 @@ public class SignMojo extends AbstractMojo
       throw new MojoExecutionException("Wrong exit code '" + exitCode + "'. Jar signing or verifying failed");
   }
 
-  private boolean _existingChecksumMatchs(File pFile) throws MojoExecutionException
+  private boolean _existingChecksumMatches(File pFile) throws MojoExecutionException
   {
     String existingChecksum;
     try
     {
-      existingChecksum = FileUtils.fileRead(pFile.getAbsoluteFile() + ".signed.sha1");
+      existingChecksum = FileUtils.fileRead(pFile.getAbsoluteFile() + CHECKSUM_POSTFIX);
     }
     catch (IOException e)
     {
@@ -202,12 +242,12 @@ public class SignMojo extends AbstractMojo
     }
   }
 
-  private void _installSignChecksum(File pFile)
+  private void _installSignChecksum(File pFile, String pChecksumPath)
       throws MojoExecutionException
   {
     String checksum = _getChecksum(pFile);
 
-    File checksumFile = new File(pFile.getAbsolutePath() + ".signed.sha1");
+    File checksumFile = new File(pChecksumPath);
     getLog().debug("Installing checksum to " + checksumFile);
     try
     {
