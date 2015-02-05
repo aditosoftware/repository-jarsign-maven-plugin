@@ -169,28 +169,21 @@ public class SignMojo extends AbstractMojo
 
   private void _updateManifest(File pFile) throws IOException
   {
-    try
+    String manifestPath = "META-INF/MANIFEST.MF";
+    byte[] zipContent = ZipUtil.unpackEntry(pFile, manifestPath);
+    try (ByteArrayInputStream inputStream = new ByteArrayInputStream(zipContent))
     {
-      String manifestPath = "META-INF/MANIFEST.MF";
-      byte[] zipContent = ZipUtil.unpackEntry(pFile, manifestPath);
-      try (ByteArrayInputStream inputStream = new ByteArrayInputStream(zipContent))
-      {
-        Manifest manifest = new Manifest(inputStream);
-        Attributes mainAttributes = manifest.getMainAttributes();
-        for (Map.Entry<String, String> entry : additionalManifestEntries.entrySet())
-          mainAttributes.putValue(entry.getKey(), entry.getValue());
+      Manifest manifest = new Manifest(inputStream);
+      Attributes mainAttributes = manifest.getMainAttributes();
+      for (Map.Entry<String, String> entry : additionalManifestEntries.entrySet())
+        mainAttributes.putValue(entry.getKey(), entry.getValue());
 
-        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
-        {
-          manifest.write(outputStream);
-          ZipUtil.replaceEntry(pFile, manifestPath, outputStream.toByteArray());
-          getLog().info("Updated manifest for " + pFile + ".");
-        }
+      try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
+      {
+        manifest.write(outputStream);
+        ZipUtil.replaceEntry(pFile, manifestPath, outputStream.toByteArray());
+        getLog().info("Updated manifest for " + pFile + ".");
       }
-    }
-    catch (Exception e)
-    {
-      getLog().error(e);
     }
   }
 
@@ -211,7 +204,7 @@ public class SignMojo extends AbstractMojo
       throw executionException;
     int exitCode = result.getExitCode();
     if (exitCode != 0)
-      throw new MojoExecutionException("Wrong exit code '" + exitCode + "'. Jar signing or verifying failed");
+      throw new MojoExecutionException("Wrong exit code '" + exitCode + "'. Jar signing or verifying failed for " + pRequest.getArchive().getAbsolutePath() + ".");
   }
 
   private boolean _existingChecksumMatches(File pFile) throws MojoExecutionException
