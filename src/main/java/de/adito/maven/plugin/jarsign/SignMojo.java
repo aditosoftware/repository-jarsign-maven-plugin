@@ -120,7 +120,7 @@ public class SignMojo extends AbstractMojo
       }
       getLog().info(workFiles.size() + " jars have been signed and verified.");
     }
-    catch (CommandLineException | IOException | JavaToolException | InterruptedException e)
+    catch (Exception e)
     {
       throw new MojoExecutionException(e.getMessage(), e);
     }
@@ -170,20 +170,27 @@ public class SignMojo extends AbstractMojo
   private void _updateManifest(File pFile) throws IOException
   {
     String manifestPath = "META-INF/MANIFEST.MF";
+
+    Manifest manifest;
     byte[] zipContent = ZipUtil.unpackEntry(pFile, manifestPath);
-    try (ByteArrayInputStream inputStream = new ByteArrayInputStream(zipContent))
-    {
-      Manifest manifest = new Manifest(inputStream);
-      Attributes mainAttributes = manifest.getMainAttributes();
+    if (zipContent == null)
+      manifest = new Manifest();
+    else
+      try (ByteArrayInputStream inputStream = new ByteArrayInputStream(zipContent))
+      {
+        manifest = new Manifest(inputStream);
+      }
+
+    Attributes mainAttributes = manifest.getMainAttributes();
+    if (additionalManifestEntries != null)
       for (Map.Entry<String, String> entry : additionalManifestEntries.entrySet())
         mainAttributes.putValue(entry.getKey(), entry.getValue());
 
-      try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
-      {
-        manifest.write(outputStream);
-        ZipUtil.replaceEntry(pFile, manifestPath, outputStream.toByteArray());
-        getLog().info("Updated manifest for " + pFile + ".");
-      }
+    try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
+    {
+      manifest.write(outputStream);
+      ZipUtil.replaceEntry(pFile, manifestPath, outputStream.toByteArray());
+      getLog().info("Updated manifest for " + pFile + ".");
     }
   }
 
