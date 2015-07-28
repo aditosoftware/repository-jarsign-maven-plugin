@@ -160,6 +160,14 @@ public class SignMojo extends AbstractMojo
         File file = artifact.getFile();
         if (forceSign || !_existingChecksumMatches(file))
           workFiles.add(file);
+        if (!artifact.getBaseVersion().equals(artifact.getVersion()))
+        {
+          toSignCount++;
+          String versionedName = file.getName().replace(artifact.getBaseVersion(), artifact.getVersion());
+          file = new File(file.getParentFile(), versionedName);
+          if (forceSign || !_existingChecksumMatches(file))
+            workFiles.add(file);
+        }
       }
     }
     getLog().info(toSignCount + " jars are relevant for signing.");
