@@ -17,6 +17,8 @@ import java.io.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.*;
 
 /**
@@ -103,9 +105,12 @@ public class SignMojo extends AbstractMojo
 
   public void execute() throws MojoExecutionException
   {
+    int availableProcessors = Runtime.getRuntime().availableProcessors();
+    ExecutorService executorService = Executors.newFixedThreadPool(availableProcessors);
+
     try
     {
-      DefaultJarSigner jarSigner = new DefaultJarSigner();
+      final DefaultJarSigner jarSigner = new DefaultJarSigner();
       jarSigner.enableLogging(new ConsoleLogger());
       SignChecksumHelper signChecksumHelper = new SignChecksumHelper(getLog(), digester);
 
@@ -158,38 +163,26 @@ public class SignMojo extends AbstractMojo
         }
       }
 
-      int signedCount = 0;
-      int verifiedCount = 0;
+      final AtomicInteger signedCount = new AtomicInteger();
+      final AtomicInteger verifiedCount = new AtomicInteger();
 
+      List<Future> futureList = new LinkedList<>();
       // update signing directory and verify
-      for (SignCandidate candidate : candidates)
+      for (final SignCandidate candidate : candidates)
       {
-        File file = candidate.getFile();
-        switch (candidate.getType())
+        futureList.add(executorService.submit(new Callable<Void>()
         {
-          case NEW:
-            signedCount++;
-
-            // fall through
-          case CACHED:
-            File workingCopy = candidate.getWorkingCopy();
-            FileUtils.copyFile(workingCopy, file);
-
-            // fall through
-          default:
-            JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
-            _setup(verifyRequest, file);
-            verifyRequest.setVerbose(true);
-            verifyRequest.setArguments("-strict", "-verbose:summary");
-            _execute(jarSigner, verifyRequest);
-
-            verifiedCount++;
-            break;
-        }
-
-        if (Thread.interrupted())
-          throw new InterruptedException();
+          @Override
+          public Void call() throws Exception
+          {
+            _verify(jarSigner, candidate, signedCount, verifiedCount);
+            return null;
+          }
+        }));
       }
+      // wait till verification finshed.
+      for (Future future : futureList)
+        future.get();
 
       getLog().info(signedCount + " jars have been signed.");
       getLog().info(verifiedCount + " jars have been verified.");
@@ -198,6 +191,40 @@ public class SignMojo extends AbstractMojo
     {
       throw new MojoExecutionException(e.getMessage(), e);
     }
+  }
+
+  private void _verify(DefaultJarSigner pJarSigner, SignCandidate pCandidate, AtomicInteger pSignedCount,
+                       AtomicInteger pVerifiedCount)
+      throws IOException, JavaToolException, CommandLineException, MojoExecutionException, InterruptedException
+  {
+    File file = pCandidate.getFile();
+    switch (pCandidate.getType())
+    {
+      case NEW:
+        pSignedCount.incrementAndGet();
+
+        // fall through
+      case CACHED:
+        synchronized (id.intern())
+        {
+          File workingCopy = pCandidate.getWorkingCopy();
+          FileUtils.copyFile(workingCopy, file);
+        }
+
+        // fall through
+      default:
+        JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
+        _setup(verifyRequest, file);
+        verifyRequest.setVerbose(true);
+        verifyRequest.setArguments("-strict", "-verbose:summary");
+        _execute(pJarSigner, verifyRequest);
+
+        pVerifiedCount.incrementAndGet();
+        break;
+    }
+
+    if (Thread.interrupted())
+      throw new InterruptedException();
   }
 
   private Set<File> _getWorkFiles() throws IOException
