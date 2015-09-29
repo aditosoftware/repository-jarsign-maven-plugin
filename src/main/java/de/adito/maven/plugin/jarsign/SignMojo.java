@@ -7,21 +7,19 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.jarsigner.*;
 import org.apache.maven.shared.utils.cli.CommandLineException;
-import org.apache.maven.shared.utils.cli.javatool.*;
+import org.apache.maven.shared.utils.cli.javatool.JavaToolException;
 import org.codehaus.plexus.digest.Digester;
 import org.codehaus.plexus.logging.console.ConsoleLogger;
-import org.codehaus.plexus.util.FileUtils;
-import org.zeroturnaround.zip.ZipUtil;
 
-import java.io.*;
+import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.jar.*;
 
 /**
+ * Mojo for signing jars in a folder.
+ *
  * @author PaL
  *         Date: 01.02.15
  *         Time. 21:15
@@ -102,6 +100,18 @@ public class SignMojo extends AbstractMojo
   @Parameter(property = "jarsigner.tsa")
   private String tsa;
 
+  /**
+   * Defines whether the jars shall be repacked by the pack200 utility. This might be necessary when using pack200.
+   */
+  @Parameter(defaultValue = "false")
+  private boolean repack;
+
+  /**
+   * If <i>true</i> the jars are packed with pack200 after the jars were signed.
+   */
+  @Parameter(defaultValue = "false")
+  private boolean pack200;
+
 
   public void execute() throws MojoExecutionException
   {
@@ -112,56 +122,10 @@ public class SignMojo extends AbstractMojo
     {
       final DefaultJarSigner jarSigner = new DefaultJarSigner();
       jarSigner.enableLogging(new ConsoleLogger());
-      SignChecksumHelper signChecksumHelper = new SignChecksumHelper(getLog(), digester);
 
-      Set<File> workFiles = _getWorkFiles();
-      List<SignCandidate> candidates = new ArrayList<>();
+      Set<Path> workFiles = SignUtility.getWorkPaths(project, jarDirectory, types);
 
-      // update shared directory
-      synchronized (id.intern())
-      {
-        Path cachePath = Paths.get(localRepository.getBasedir()).getParent().resolve("jarsign-cache").resolve(id);
-        Files.createDirectories(cachePath);
-
-        for (File file : workFiles)
-        {
-          SignCandidate candidate = new SignCandidate(file, cachePath, signChecksumHelper, forceSign);
-          candidates.add(candidate);
-          switch (candidate.getType())
-          {
-            case NEW:
-              getLog().info("Signing " + candidate.getFile().getAbsolutePath() + ".");
-
-              File workingCopy = candidate.getWorkingCopy();
-              FileUtils.copyFile(file, workingCopy);
-
-              JarSignerUtil.unsignArchive(workingCopy);
-
-              _updateManifest(workingCopy);
-
-              JarSignerSignRequest signRequest = new JarSignerSignRequest();
-              _setup(signRequest, workingCopy);
-              signRequest.setKeypass(keypass);
-              signRequest.setTsaLocation(tsa);
-              _execute(jarSigner, signRequest);
-
-              // install default checksum
-              signChecksumHelper.installSignChecksum(file, candidate.getCheckSumPath());
-              // install signed checksum
-              signChecksumHelper.installSignChecksum(workingCopy, candidate.getSignedCheckSumPath());
-
-              break;
-            case CACHED:
-            case SIGNED:
-              break;
-            default:
-              throw new MojoExecutionException("unknown type: " + candidate.getType());
-          }
-
-          if (Thread.interrupted())
-            throw new InterruptedException();
-        }
-      }
+      List<SignCandidate> candidates = _sign(jarSigner, workFiles);
 
       final AtomicInteger signedCount = new AtomicInteger();
       final AtomicInteger verifiedCount = new AtomicInteger();
@@ -193,11 +157,75 @@ public class SignMojo extends AbstractMojo
     }
   }
 
+
+  private List<SignCandidate> _sign(DefaultJarSigner pJarSigner, Set<Path> pWorkFiles)
+      throws IOException, MojoExecutionException, CommandLineException, JavaToolException, InterruptedException
+  {
+    SignChecksumHelper signChecksumHelper = new SignChecksumHelper(getLog(), digester);
+
+    List<SignCandidate> candidates = new ArrayList<>();
+
+    // update shared directory
+    synchronized (id.intern())
+    {
+      Path cachePath = Paths.get(localRepository.getBasedir()).getParent().resolve("jarsign-cache").resolve(id);
+      Files.createDirectories(cachePath);
+
+      for (Path archivePath : pWorkFiles)
+      {
+        SignCandidate candidate = new SignCandidate(archivePath, cachePath, signChecksumHelper, forceSign, repack, pack200);
+        candidates.add(candidate);
+        switch (candidate.getType())
+        {
+          case NEW:
+            getLog().info("Signing " + candidate.getArchivePath() + ".");
+
+            // install default checksum
+            signChecksumHelper.installSignChecksum(candidate.getCheckSumPath(), archivePath, repack);
+
+            JarSignerUtil.unsignArchive(archivePath.toFile());
+
+            SignUtility.updateManifest(getLog(), additionalManifestEntries, archivePath);
+
+            if (repack)
+            {
+              Path packPath = PackUtility.pack(archivePath);
+              PackUtility.unpack(packPath, archivePath);
+              Files.delete(packPath);
+            }
+
+            SignUtility.sign(pJarSigner, alias, keystore, storepass, keypass, tsa, archivePath);
+
+            if (pack200)
+              archivePath = PackUtility.pack(archivePath);
+
+            Files.copy(archivePath, candidate.getCopyPath(), StandardCopyOption.REPLACE_EXISTING);
+
+            // install signed checksum
+            signChecksumHelper.installSignChecksum(candidate.getSignedCheckSumPath(), archivePath, repack);
+
+            break;
+          case CACHED:
+          case SIGNED:
+            break;
+          default:
+            throw new MojoExecutionException("unknown type: " + candidate.getType());
+        }
+
+        if (Thread.interrupted())
+          throw new InterruptedException();
+      }
+    }
+    return candidates;
+  }
+
+
   private void _verify(DefaultJarSigner pJarSigner, SignCandidate pCandidate, AtomicInteger pSignedCount,
                        AtomicInteger pVerifiedCount)
       throws IOException, JavaToolException, CommandLineException, MojoExecutionException, InterruptedException
   {
-    File file = pCandidate.getFile();
+    Path archivePath = pack200 ? PackUtility.getPackPath(pCandidate.getArchivePath()) : pCandidate.getArchivePath();
+
     switch (pCandidate.getType())
     {
       case NEW:
@@ -205,19 +233,25 @@ public class SignMojo extends AbstractMojo
 
         // fall through
       case CACHED:
-        synchronized (id.intern())
-        {
-          File workingCopy = pCandidate.getWorkingCopy();
-          FileUtils.copyFile(workingCopy, file);
-        }
+        if (pCandidate.getType() != SignCandidate.TYPE.NEW)
+          synchronized (id.intern())
+          {
+            Files.copy(pCandidate.getCopyPath(), archivePath, StandardCopyOption.REPLACE_EXISTING);
+          }
 
         // fall through
       default:
-        JarSignerVerifyRequest verifyRequest = new JarSignerVerifyRequest();
-        _setup(verifyRequest, file);
-        verifyRequest.setVerbose(true);
-        verifyRequest.setArguments("-strict", "-verbose:summary");
-        _execute(pJarSigner, verifyRequest);
+        if (pack200)
+        {
+          Path unpackPath = pCandidate.getArchivePath();
+          PackUtility.unpack(archivePath, unpackPath);
+          archivePath = unpackPath;
+        }
+
+        SignUtility.verify(pJarSigner, alias, keystore, storepass, archivePath);
+
+        if (pack200)
+          Files.delete(archivePath);
 
         pVerifiedCount.incrementAndGet();
         break;
@@ -225,81 +259,6 @@ public class SignMojo extends AbstractMojo
 
     if (Thread.interrupted())
       throw new InterruptedException();
-  }
-
-  private Set<File> _getWorkFiles() throws IOException
-  {
-    Path path = Paths.get(jarDirectory);
-    if (!path.isAbsolute())
-      path = project.getBasedir().toPath().resolve(path);
-
-    final PathMatcher matcher = path.getFileSystem().getPathMatcher("glob:**.{" + types + "}");
-    final Set<File> workFiles = new HashSet<>();
-
-    if (Files.exists(path))
-    {
-      Files.walkFileTree(path, new SimpleFileVisitor<Path>()
-      {
-        @Override
-        public FileVisitResult visitFile(Path pFilePath, BasicFileAttributes attrs) throws IOException
-        {
-          FileVisitResult visitResult = super.visitFile(pFilePath, attrs);
-          if (matcher.matches(pFilePath))
-            workFiles.add(pFilePath.toFile());
-          return visitResult;
-        }
-      });
-    }
-
-    return workFiles;
-  }
-
-  private void _updateManifest(File pFile) throws IOException
-  {
-    String manifestPath = "META-INF/MANIFEST.MF";
-
-    Manifest manifest;
-    byte[] zipContent = ZipUtil.unpackEntry(pFile, manifestPath);
-    if (zipContent == null)
-      manifest = new Manifest();
-    else
-      try (ByteArrayInputStream inputStream = new ByteArrayInputStream(zipContent))
-      {
-        manifest = new Manifest(inputStream);
-      }
-
-    Attributes mainAttributes = manifest.getMainAttributes();
-    if (additionalManifestEntries != null)
-      for (Map.Entry<String, String> entry : additionalManifestEntries.entrySet())
-        mainAttributes.putValue(entry.getKey(), entry.getValue());
-
-    try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
-    {
-      manifest.write(outputStream);
-      ZipUtil.replaceEntry(pFile, manifestPath, outputStream.toByteArray());
-      getLog().info("Updated manifest for " + pFile + ".");
-    }
-  }
-
-  private void _setup(AbstractJarSignerRequest pRequest, File pFile)
-  {
-    pRequest.setKeystore(keystore);
-    pRequest.setAlias(alias);
-    pRequest.setStorepass(storepass);
-    pRequest.setArchive(pFile);
-  }
-
-  private void _execute(JarSigner pJarSigner, AbstractJarSignerRequest pRequest)
-      throws CommandLineException, JavaToolException, MojoExecutionException
-  {
-    JavaToolResult result = pJarSigner.execute(pRequest);
-    CommandLineException executionException = result.getExecutionException();
-    if (executionException != null)
-      throw executionException;
-    int exitCode = result.getExitCode();
-    if (exitCode != 0)
-      throw new MojoExecutionException("Wrong exit code '" + exitCode + "'. Jar signing or verifying failed for "
-                                           + pRequest.getArchive().getAbsolutePath() + ".");
   }
 
 }

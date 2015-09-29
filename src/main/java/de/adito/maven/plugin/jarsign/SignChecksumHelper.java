@@ -5,9 +5,12 @@ import org.apache.maven.plugin.logging.Log;
 import org.codehaus.plexus.digest.*;
 import org.codehaus.plexus.util.FileUtils;
 
-import java.io.*;
+import java.io.IOException;
+import java.nio.file.*;
 
 /**
+ * Helper for checksum.
+ *
  * @author j.boesl, 27.08.15
  */
 class SignChecksumHelper
@@ -23,18 +26,18 @@ class SignChecksumHelper
     digester = pDigester;
   }
 
-  boolean existingChecksumMatches(File pFile, String pChecksumPath) throws MojoExecutionException
+  boolean existingChecksumMatches(Path pChecksumPath, Path pArchivePath, boolean pRepack) throws MojoExecutionException
   {
     String existingChecksum = readChecksum(pChecksumPath);
-    return existingChecksum != null && calculateChecksum(pFile).equals(existingChecksum);
+    return existingChecksum != null && _calculateChecksum(pArchivePath, pRepack).equals(existingChecksum);
   }
 
-  String readChecksum(String pChecksumPath)
+  String readChecksum(Path pChecksumPath)
   {
     try
     {
-      File checksumFile = new File(pChecksumPath + _getPostfix());
-      return FileUtils.fileRead(checksumFile);
+      Path path = pChecksumPath.resolveSibling(pChecksumPath.getFileName() + _getPostfix());
+      return FileUtils.fileRead(path.toFile());
     }
     catch (IOException e)
     {
@@ -42,34 +45,34 @@ class SignChecksumHelper
     }
   }
 
-  void installSignChecksum(File pFile, String pChecksumPath) throws MojoExecutionException
+  void installSignChecksum(Path pChecksumPath, Path pArchivePath, boolean pRepack) throws MojoExecutionException
   {
-    String checksum = calculateChecksum(pFile);
+    String checksum = _calculateChecksum(pArchivePath, pRepack);
 
-    File checksumFile = new File(pChecksumPath + _getPostfix());
-    log.debug("Installing checksum to " + checksumFile);
+    Path path = pChecksumPath.resolveSibling(pChecksumPath.getFileName() + _getPostfix());
+    log.debug("Installing checksum to " + path);
     try
     {
-      checksumFile.getParentFile().mkdirs();
-      FileUtils.fileWrite(checksumFile.getAbsolutePath(), "UTF-8", checksum);
+      Files.createDirectories(path.getParent());
+      FileUtils.fileWrite(path.toFile(), "UTF-8", checksum);
     }
     catch (IOException e)
     {
-      throw new MojoExecutionException("Failed to install checksum to " + checksumFile, e);
+      throw new MojoExecutionException("Failed to install checksum to " + path, e);
     }
   }
 
-  String calculateChecksum(File pFile) throws MojoExecutionException
+  private String _calculateChecksum(Path pArchivePath, boolean pRepack) throws MojoExecutionException
   {
-    log.debug("Calculating " + digester.getAlgorithm() + " checksum for " + pFile);
+    log.debug("Calculating " + digester.getAlgorithm() + " checksum for " + pArchivePath);
     try
     {
-      return digester.calc(pFile);
+      String checksum = digester.calc(pArchivePath.toFile());
+      return (pRepack ? "REPACK" : "NO_REPACK") + ":" + checksum;
     }
     catch (DigesterException e)
     {
-      throw new MojoExecutionException("Failed to calculate " + digester.getAlgorithm() + " checksum for "
-                                           + pFile, e);
+      throw new MojoExecutionException("Failed to calculate " + digester.getAlgorithm() + " checksum for " + pArchivePath, e);
     }
   }
 

@@ -2,60 +2,65 @@ package de.adito.maven.plugin.jarsign;
 
 import org.apache.maven.plugin.MojoExecutionException;
 
-import java.io.File;
-import java.nio.file.Path;
+import java.nio.file.*;
 
 /**
+ * Summary for a candidate for signing.
+ *
  * @author j.boesl, 27.08.15
  */
 public class SignCandidate
 {
 
-  private File file;
-  private File workingCopy;
-  private String checkSumPath;
-  private String signedCheckSumPath;
+  private Path archivePath;
+  private Path copyPath;
+  private Path checkSumPath;
+  private Path signedCheckSumPath;
   private TYPE type;
 
-  public SignCandidate(File pFile, Path pCachePath, SignChecksumHelper pSignChecksumHelper, boolean pForceSign) throws MojoExecutionException
+  public SignCandidate(Path pArchivePath, Path pCachePath, SignChecksumHelper pSignChecksumHelper, boolean pForceSign,
+                       boolean pRepack, boolean pPack200)
+      throws MojoExecutionException
   {
-    file = pFile;
-    workingCopy = new File(pCachePath.toFile(), file.getName());
+    archivePath = pArchivePath;
+    copyPath = pCachePath.resolve(archivePath.getFileName());
+    if (pPack200)
+      copyPath = PackUtility.getPackPath(copyPath);
 
-    checkSumPath = pCachePath.resolve(file.getName()).toFile().getAbsolutePath();
-    signedCheckSumPath = pCachePath.resolve(file.getName() + ".signed").toFile().getAbsolutePath();
+    checkSumPath = pCachePath.resolve(copyPath.getFileName());
+    signedCheckSumPath = pCachePath.resolve(copyPath.getFileName() + ".signed");
 
-    if (pForceSign)
+    if (pForceSign || !Files.exists(copyPath))
       type = TYPE.NEW;
     else
     {
-      boolean signedExists = pSignChecksumHelper.existingChecksumMatches(file, checkSumPath);
+      boolean signedExists = pSignChecksumHelper.existingChecksumMatches(checkSumPath, archivePath, pRepack);
       if (signedExists)
         type = TYPE.CACHED;
       else
       {
-        boolean alreadySigned = pSignChecksumHelper.existingChecksumMatches(file, signedCheckSumPath);
+        boolean alreadySigned = pSignChecksumHelper.existingChecksumMatches(signedCheckSumPath, archivePath, pRepack);
         type = alreadySigned ? TYPE.SIGNED : TYPE.NEW;
       }
     }
   }
 
-  public File getFile()
+  public Path getArchivePath()
   {
-    return file;
+    return archivePath;
   }
 
-  public File getWorkingCopy()
+  public Path getCopyPath()
   {
-    return workingCopy;
+    return copyPath;
   }
 
-  public String getCheckSumPath()
+  public Path getCheckSumPath()
   {
     return checkSumPath;
   }
 
-  public String getSignedCheckSumPath()
+  public Path getSignedCheckSumPath()
   {
     return signedCheckSumPath;
   }
