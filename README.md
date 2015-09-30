@@ -14,9 +14,9 @@ Common usage
   ...
   <plugins>
     <plugin>
-      <groupId>de.adito</groupId>
+      <groupId>de.adito.maven</groupId>
       <artifactId>repository-jarsign-maven-plugin</artifactId>
-      <version>1.0</version>
+      <version>2.1.1</version>
       <configuration>
         <alias>test</alias>
         <keystore>~/.testkeystore</keystore>

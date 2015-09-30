@@ -1,4 +1,4 @@
-package de.adito.maven.plugin.jarsign;
+package de.adito.maven.repositoryjarsignplugin;
 
 import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.plugin.*;

@@ -1,4 +1,4 @@
-package de.adito.maven.plugin.jarsign;
+package de.adito.maven.repositoryjarsignplugin;
 
 import java.io.*;
 import java.nio.file.*;
