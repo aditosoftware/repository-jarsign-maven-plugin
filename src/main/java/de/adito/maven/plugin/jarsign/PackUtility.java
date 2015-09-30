@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.Map;
 import java.util.jar.*;
+import java.util.zip.*;
 
 /**
  * Utility for pack200
@@ -13,7 +14,8 @@ import java.util.jar.*;
 public class PackUtility
 {
 
-  private static final String PACK_POSTFIX = ".pack.gz";
+  private static final String PACK = ".pack";
+  private static final String GZ = ".gz";
 
 
   private PackUtility()
@@ -23,7 +25,7 @@ public class PackUtility
 
   static Path getPackPath(Path pArchivePath)
   {
-    return pArchivePath.resolveSibling(pArchivePath.getFileName() + PACK_POSTFIX);
+    return pArchivePath.resolveSibling(pArchivePath.getFileName() + PACK + GZ);
   }
 
   static Path pack(Path pArchivePath) throws IOException
@@ -36,21 +38,45 @@ public class PackUtility
   static void pack(Path pSource, Path pTarget) throws IOException
   {
     Pack200.Packer packer = _getPacker();
-    try (JarInputStream inputStream = new JarInputStream(Files.newInputStream(pSource));
-         OutputStream outputStream = Files.newOutputStream(pTarget))
+    try (JarInputStream jis = new JarInputStream(Files.newInputStream(pSource));
+         OutputStream fos = Files.newOutputStream(pTarget))
     {
-      packer.pack(inputStream, outputStream);
+      if (pTarget.toString().endsWith(GZ))
+      {
+        try (OutputStream gzos = new GZIPOutputStream(fos))
+        {
+          packer.pack(jis, gzos);
+        }
+      }
+      else
+        packer.pack(jis, fos);
     }
   }
 
   static void unpack(Path pPackPath, Path pArchivePath) throws IOException
   {
     Pack200.Unpacker unpacker = Pack200.newUnpacker();
-    try (InputStream inputStream = Files.newInputStream(pPackPath);
-         JarOutputStream outputStream = new JarOutputStream(Files.newOutputStream(pArchivePath)))
+    try (InputStream fis = Files.newInputStream(pPackPath);
+         JarOutputStream jos = new JarOutputStream(Files.newOutputStream(pArchivePath)))
     {
-      unpacker.unpack(inputStream, outputStream);
+      if (pPackPath.toString().endsWith(GZ))
+      {
+        try (InputStream gzis = new GZIPInputStream(fis))
+        {
+          unpacker.unpack(gzis, jos);
+        }
+      }
+      else
+        unpacker.unpack(fis, jos);
     }
+  }
+
+  static void repack(Path pArchivePath) throws IOException
+  {
+    Path packPath = pArchivePath.resolveSibling(pArchivePath.getFileName() + PACK);
+    pack(pArchivePath, packPath);
+    unpack(packPath, pArchivePath);
+    Files.delete(packPath);
   }
 
   static private Pack200.Packer _getPacker()

@@ -188,11 +188,8 @@ public class SignMojo extends AbstractMojo
             SignUtility.updateManifest(getLog(), additionalManifestEntries, archivePath);
 
             if (repack)
-            {
-              Path packPath = PackUtility.pack(archivePath);
-              PackUtility.unpack(packPath, archivePath);
-              Files.delete(packPath);
-            }
+              PackUtility.repack(archivePath);
+
 
             SignUtility.sign(pJarSigner, alias, keystore, storepass, keypass, tsa, archivePath);
 
