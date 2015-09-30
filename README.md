@@ -1,3 +1,7 @@
+# repository-jarsign-maven-plugin
+[![Build Status](https://travis-ci.org/jboesl/repository-jarsign-maven-plugin.svg?branch=master)](https://travis-ci.org/jboesl/repository-jarsign-maven-plugin)
+
+
 Overview
 --------
 This plugin speeds up jar signing especially when used together with tsa time stamping by a remote server.
