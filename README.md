@@ -1,7 +1,7 @@
 Overview
 --------
-This plugin tries to speed up jar signing especially when used together with tsa timestamping by a remote server.
-To solve the problems jars are signed in local repository and not in the target folder thus each jar is signed only once and the next time the signature is reused.
+This plugin speeds up jar signing especially when used together with tsa time stamping by a remote server.
+To solve this problem signed jars are cached in local repository. This way each jar that hasn't changed is signed only once and the next time the signature is reused.
 
 Common usage
 ------------
@@ -24,6 +24,8 @@ Common usage
           <TestEntry>testValue</TestEntry>
           <Codebase>just.a.test</Codebase>
         </additionalManifestEntries>
+        <repack>true</repack>
+        <pack200>true</pack200>
       </configuration>
     </plugin>
   </plugins>
