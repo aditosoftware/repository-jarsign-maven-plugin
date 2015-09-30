@@ -8,11 +8,18 @@
   <artifactId>repository-jarsign-maven-plugin</artifactId>
   <version>2.1.1</version>
   <packaging>maven-plugin</packaging>
-  <name>repository jarsign maven plugin</name>
 
-  <description>A maven plugin that signs jars in your local repository so that they need to be signed only once.
-  </description>
+  <name>${project.groupId}:${project.artifactId}</name>
+  <description>A maven plugin that signs jars in your local repository so that they need to be signed only once.</description>
+  <url>https://github.com/jboesl/repository-jarsign-maven-plugin</url>
 
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>LICENSE.md</url>
+    </license>
+  </licenses>
 
   <organization>
     <name>ADITO Software GmbH</name>
@@ -21,10 +28,12 @@
 
   <developers>
     <developer>
-      <name>Johannes Boesl</name>
       <id>jboesl</id>
+      <name>Johannes Boesl</name>
       <email>j.boesl@adito.de</email>
       <timezone>1</timezone>
+      <organization>ADITO Software GmbH</organization>
+      <organizationUrl>http://www.adito.de</organizationUrl>
     </developer>
   </developers>
 
@@ -39,18 +48,10 @@
     <system>github</system>
   </issueManagement>
 
-
   <distributionManagement>
-    <repository>
-      <id>adito.m2</id>
-      <name>releases</name>
-      <url>${repository.releases}</url>
-    </repository>
     <snapshotRepository>
-      <id>adito.m2</id>
-      <name>snapshots</name>
-      <url>${repository.snapshots}</url>
-      <uniqueVersion>false</uniqueVersion>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
     </snapshotRepository>
   </distributionManagement>
 
@@ -153,6 +154,12 @@
         <artifactId>maven-source-plugin</artifactId>
         <version>2.4</version>
       </plugin>
+
+      <plugin>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>2.10.3</version>
+      </plugin>
+
     </plugins>
 
     <pluginManagement>
@@ -178,5 +185,67 @@
     </pluginManagement>
 
   </build>
+
+
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+
+          <plugin>
+            <artifactId>maven-source-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-javadoc</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>1.6</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.sonatype.plugins</groupId>
+            <artifactId>nexus-staging-maven-plugin</artifactId>
+            <version>1.6.5</version>
+            <extensions>true</extensions>
+            <configuration>
+              <serverId>ossrh</serverId>
+              <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+              <autoReleaseAfterClose>true</autoReleaseAfterClose>
+            </configuration>
+          </plugin>
+
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 
 </project>
