@@ -6,11 +6,14 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.jarsigner.*;
 import org.apache.maven.shared.utils.cli.CommandLineException;
 import org.apache.maven.shared.utils.cli.javatool.*;
+import org.codehaus.plexus.digest.*;
 import org.zeroturnaround.zip.ZipUtil;
 
 import java.io.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.util.*;
 import java.util.jar.*;
 
@@ -53,6 +56,30 @@ public class SignUtility
     return workFiles;
   }
 
+  static byte[] getKeyStoreKeyDigest(String pKeystore, String pAlias, String pStorepass, String pKeypass, Digester pDigester)
+      throws MojoExecutionException
+  {
+    try
+    {
+      try (InputStream ksis = Files.newInputStream(Paths.get(pKeystore)))
+      {
+        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keyStore.load(ksis, pStorepass.toCharArray());
+        Key key = keyStore.getKey(pAlias, pKeypass.toCharArray());
+
+
+        MessageDigest md = MessageDigest.getInstance(pDigester.getAlgorithm());
+        md.reset();
+        byte[] result = Hex.encode(md.digest(key.getEncoded())).getBytes();
+        md.reset();
+        return result;
+      }
+    }
+    catch (IOException | UnrecoverableKeyException | CertificateException | NoSuchAlgorithmException | KeyStoreException e)
+    {
+      throw new MojoExecutionException("Could not read key for signing.", e);
+    }
+  }
 
   static void updateManifest(Log pLogger, Map<String, String> pAdditionalManifestEntries, Path pPath) throws IOException
   {

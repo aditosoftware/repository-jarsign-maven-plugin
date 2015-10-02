@@ -115,17 +115,24 @@ public class SignMojo extends AbstractMojo
 
   public void execute() throws MojoExecutionException
   {
+    jarDirectory = _normalizeFilePath(jarDirectory);
+    keystore = _normalizeFilePath(keystore);
+
     int availableProcessors = Runtime.getRuntime().availableProcessors();
     ExecutorService executorService = Executors.newFixedThreadPool(availableProcessors);
 
     try
     {
+      Path cachePath = _getCachePath();
+      if (_isNewKeyStoreKey(cachePath))
+        forceSign = true;
+
       final DefaultJarSigner jarSigner = new DefaultJarSigner();
       jarSigner.enableLogging(new ConsoleLogger());
 
       Set<Path> workFiles = SignUtility.getWorkPaths(project, jarDirectory, types);
 
-      List<SignCandidate> candidates = _sign(jarSigner, workFiles);
+      List<SignCandidate> candidates = _sign(jarSigner, cachePath, workFiles);
 
       final AtomicInteger signedCount = new AtomicInteger();
       final AtomicInteger verifiedCount = new AtomicInteger();
@@ -153,12 +160,14 @@ public class SignMojo extends AbstractMojo
     }
     catch (Exception e)
     {
+      if (e instanceof MojoExecutionException)
+        throw (MojoExecutionException) e;
       throw new MojoExecutionException(e.getMessage(), e);
     }
   }
 
 
-  private List<SignCandidate> _sign(DefaultJarSigner pJarSigner, Set<Path> pWorkFiles)
+  private List<SignCandidate> _sign(DefaultJarSigner pJarSigner, Path pCachePath, Set<Path> pWorkFiles)
       throws IOException, MojoExecutionException, CommandLineException, JavaToolException, InterruptedException
   {
     SignChecksumHelper signChecksumHelper = new SignChecksumHelper(getLog(), digester);
@@ -168,12 +177,9 @@ public class SignMojo extends AbstractMojo
     // update shared directory
     synchronized (id.intern())
     {
-      Path cachePath = Paths.get(localRepository.getBasedir()).getParent().resolve("jarsign-cache").resolve(id);
-      Files.createDirectories(cachePath);
-
       for (Path archivePath : pWorkFiles)
       {
-        SignCandidate candidate = new SignCandidate(archivePath, cachePath, signChecksumHelper, forceSign, repack, pack200);
+        SignCandidate candidate = new SignCandidate(archivePath, pCachePath, signChecksumHelper, forceSign, repack, pack200);
         candidates.add(candidate);
         switch (candidate.getType())
         {
@@ -256,6 +262,31 @@ public class SignMojo extends AbstractMojo
 
     if (Thread.interrupted())
       throw new InterruptedException();
+  }
+
+  private boolean _isNewKeyStoreKey(Path pCachePath) throws IOException, MojoExecutionException
+  {
+    byte[] digest = SignUtility.getKeyStoreKeyDigest(keystore, alias, storepass, keypass, digester);
+    Path kskcPath = pCachePath.resolve("_key_store_key_digest." + digester.getAlgorithm().toLowerCase());
+    if (Files.exists(kskcPath))
+    {
+      byte[] bytes = Files.readAllBytes(kskcPath);
+      if (Arrays.equals(digest, bytes))
+        return false;
+    }
+    Files.write(kskcPath, digest);
+    return true;
+  }
+
+  private Path _getCachePath() throws IOException
+  {
+    Path cachePath = Paths.get(localRepository.getBasedir()).getParent().resolve("jarsign-cache").resolve(id);
+    return Files.createDirectories(cachePath);
+  }
+
+  private String _normalizeFilePath(String pPath)
+  {
+    return pPath.replaceFirst("^~/", System.getProperty("user.home") + "/");
   }
 
 }
