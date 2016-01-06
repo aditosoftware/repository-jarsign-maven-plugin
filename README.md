@@ -1,5 +1,5 @@
 # repository-jarsign-maven-plugin
-[![Build Status](https://travis-ci.org/jboesl/repository-jarsign-maven-plugin.svg?branch=master)](https://travis-ci.org/jboesl/repository-jarsign-maven-plugin)
+[![Build Status](https://travis-ci.org/aditosoftware/repository-jarsign-maven-plugin.svg?branch=master)](https://travis-ci.org/aditosoftware/repository-jarsign-maven-plugin)
 
 
 Overview
