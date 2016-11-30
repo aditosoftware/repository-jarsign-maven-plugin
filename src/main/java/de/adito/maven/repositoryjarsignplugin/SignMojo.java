@@ -9,7 +9,6 @@ import org.apache.maven.shared.jarsigner.*;
 import org.apache.maven.shared.utils.cli.CommandLineException;
 import org.apache.maven.shared.utils.cli.javatool.JavaToolException;
 import org.codehaus.plexus.digest.Digester;
-import org.codehaus.plexus.logging.console.ConsoleLogger;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -128,7 +127,7 @@ public class SignMojo extends AbstractMojo
         forceSign = true;
 
       final DefaultJarSigner jarSigner = new DefaultJarSigner();
-      jarSigner.enableLogging(new ConsoleLogger());
+      jarSigner.enableLogging(new MavenLogger(getLog()));
 
       Set<Path> workFiles = SignUtility.getWorkPaths(project, jarDirectory, types);
 
